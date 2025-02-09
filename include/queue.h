@@ -24,11 +24,6 @@ static void queue_init(Queue* q, size_t capacity) {
     q->capacity = capacity;
 }
 
-static void queue_destroy(Queue* q) {
-    while (!empty(q))
-        queue_pop(q);
-}
-
 static bool empty(Queue* q) {
     return q->size == 0;
 }
@@ -45,9 +40,13 @@ static Node* queue_push(Queue* q, void* data) {
     res->data = data;
     res->next = NULL;
 
-    q->end->next = res;
-    q->end = res;
-    q->size++;
+    if (q->end == NULL) {
+        q->begin = q->end = res;
+    } else {
+        q->end->next = res;
+        q->end = res;
+        q->size++;
+    }
     return res;
 }
 
@@ -58,11 +57,19 @@ static void* queue_pop(Queue* q) {
 
     void* res = q->begin->data;
     Node* old_begin = q->begin;
-    q->begin = q->begin->next;
+    q->begin = old_begin->next;
+    if (q->begin == NULL)
+        q->end = NULL;
+
     free(old_begin);
 
     q->size--;
     return res;
+}
+
+static void queue_destroy(Queue* q) {
+    while (!empty(q))
+        queue_pop(q);
 }
 
 #endif
