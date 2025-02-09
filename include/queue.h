@@ -20,6 +20,7 @@ typedef struct Queue {
 
 static void queue_init(Queue* q, size_t capacity) {
     q->begin = q->end = NULL;
+    q->size = 0;
     q->capacity = capacity;
 }
 
