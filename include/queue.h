@@ -27,7 +27,6 @@ static void queue_init(Queue* q, size_t capacity) {
 static void queue_destroy(Queue* q) {
     while (!empty(q))
         queue_pop(q);
-    free(q);
 }
 
 static bool empty(Queue* q) {
