@@ -23,9 +23,6 @@ struct Executor {
     Mio* mio;
 };
 
-// TODO: delete this once not needed.
-#define UNIMPLEMENTED (exit(42))
-
 Executor* executor_create(size_t max_queue_size) {
     Executor* res = (Executor*) malloc(sizeof(Executor));
     ASSERT_MALLOC_SUCCEEDED(res);
@@ -45,15 +42,35 @@ void waker_wake(Waker* waker) {
 }
 
 void executor_spawn(Executor* executor, Future* fut) {
-    queue_push(&executor->futures_queue, fut); // something more perhaps?
+    fut->is_active = true;
+    queue_push(&executor->futures_queue, fut);
 }
 
 void executor_run(Executor* executor) {
-    UNIMPLEMENTED;
-
+    Queue* q = &executor->futures_queue;
     executor->running = true;
     while (executor->running) {
-        // ...
+        bool pending_exists = false;
+        while (!empty(q)) {
+            Future* current_fut = (Future*) queue_pop(q);
+            Waker waker = (Waker) {.executor = executor, .future = current_fut};
+            FutureState state = current_fut->progress(current_fut, executor->mio, waker);
+            switch (state) {
+                case FUTURE_COMPLETED:
+                    current_fut->is_active = false;
+                    break;
+                case FUTURE_FAILURE:
+                    current_fut->is_active = false;
+                    current_fut->errcode = 1; // 1?
+                    break;
+                case FUTURE_PENDING:
+                    pending_exists = true;
+            }
+        }
+        if (pending_exists)
+            mio_poll(executor->mio);
+        else
+            executor->running = false;
     }
 }
 
