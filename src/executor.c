@@ -48,9 +48,7 @@ void executor_spawn(Executor* executor, Future* fut) {
 
 void executor_run(Executor* executor) {
     Queue* q = &executor->futures_queue;
-    executor->running = true;
-    while (executor->running) {
-        bool pending_exists = false;
+    while (!empty(q)) {
         while (!empty(q)) {
             Future* current_fut = (Future*) queue_pop(q);
             Waker waker = (Waker) {.executor = executor, .future = current_fut};
@@ -61,16 +59,12 @@ void executor_run(Executor* executor) {
                     break;
                 case FUTURE_FAILURE:
                     current_fut->is_active = false;
-                    current_fut->errcode = 1; // 1?
                     break;
                 case FUTURE_PENDING:
-                    pending_exists = true;
+                    break;
             }
         }
-        if (pending_exists)
-            mio_poll(executor->mio);
-        else
-            executor->running = false;
+        mio_poll(executor->mio);
     }
 }
 

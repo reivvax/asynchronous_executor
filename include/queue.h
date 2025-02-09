@@ -45,8 +45,8 @@ static Node* queue_push(Queue* q, void* data) {
     } else {
         q->end->next = res;
         q->end = res;
-        q->size++;
     }
+    q->size++;
     return res;
 }
 
