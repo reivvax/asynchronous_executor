@@ -18,10 +18,9 @@ typedef struct Queue {
     size_t capacity;
 } Queue;
 
-static Queue* queue_init(size_t capacity) {
-    Queue* res = (Queue*) calloc(1, sizeof(Queue));
-    res->capacity = capacity;
-    return res; // ignore calloc failure
+static void queue_init(Queue* q, size_t capacity) {
+    q->begin = q->end = NULL;
+    q->capacity = capacity;
 }
 
 static void queue_destroy(Queue* q) {
