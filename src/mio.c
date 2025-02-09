@@ -19,9 +19,6 @@ struct Mio {
     struct epoll_event events[MAX_EVENTS];
 };
 
-// TODO: delete this once not needed.
-#define UNIMPLEMENTED (exit(42))
-
 Mio* mio_create(Executor* executor) {
     int epoll_fd = epoll_create1(0);
     if (epoll_fd == -1)
@@ -54,7 +51,11 @@ int mio_register(Mio* mio, int fd, uint32_t events, Waker waker)
     struct epoll_event ev;
     ev.events = events;
     ev.data.ptr = (void*) waker_copy;
-    return epoll_ctl(mio->epoll_fd, EPOLL_CTL_ADD, fd, &ev);
+    int res = epoll_ctl(mio->epoll_fd, EPOLL_CTL_ADD, fd, &ev);
+    if (res == -1)
+        free(waker_copy);
+    
+    return res;
 }
 
 int mio_unregister(Mio* mio, int fd)
