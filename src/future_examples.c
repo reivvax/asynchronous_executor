@@ -109,7 +109,7 @@ static FutureState pipe_write_progress(Future* base, Mio* mio, Waker waker)
         } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
             // Could not write from pipe.
             // Register the FD with MIO to watch for writeability.
-            mio_register(mio, self->fd, EPOLLIN, waker);
+            mio_register(mio, self->fd, EPOLLOUT, waker);
             return FUTURE_PENDING;
         }
     }
