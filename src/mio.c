@@ -41,8 +41,7 @@ void mio_destroy(Mio* mio) {
     free(mio);
 }
 
-int mio_register(Mio* mio, int fd, uint32_t events, Waker waker)
-{
+int mio_register(Mio* mio, int fd, uint32_t events, Waker waker) {
     debug("Registering (in Mio = %p) fd = %d\n", mio, fd);
 
     Waker* waker_copy = (Waker*) malloc(sizeof(Waker));
@@ -64,8 +63,7 @@ int mio_register(Mio* mio, int fd, uint32_t events, Waker waker)
     return res;
 }
 
-int mio_unregister(Mio* mio, int fd)
-{
+int mio_unregister(Mio* mio, int fd) {
     debug("Unregistering (from Mio = %p) fd = %d\n", mio, fd);
 
     int res = epoll_ctl(mio->epoll_fd, EPOLL_CTL_DEL, fd, NULL);
@@ -77,8 +75,7 @@ int mio_unregister(Mio* mio, int fd)
     return res;
 }
 
-void mio_poll(Mio* mio)
-{
+void mio_poll(Mio* mio) {
     debug("Mio (%p) polling\n", mio);
 
     if (mio->registered_events_count > 0) {

@@ -4,9 +4,6 @@
 #include "future.h"
 #include "waker.h"
 
-// TODO: delete this once not needed.
-#define UNIMPLEMENTED (exit(42))
-
 // ========================= ThenFuture =========================
 
 FutureState future_then_progress(Future* base, Mio* mio, Waker waker) {
@@ -45,8 +42,7 @@ FutureState future_then_progress(Future* base, Mio* mio, Waker waker) {
     return state;
 }
 
-ThenFuture future_then(Future* fut1, Future* fut2)
-{
+ThenFuture future_then(Future* fut1, Future* fut2) {
     return (ThenFuture) {
         .base = future_create(future_then_progress),
         .fut1 = fut1,
@@ -59,8 +55,6 @@ ThenFuture future_then(Future* fut1, Future* fut2)
 
 FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
     JoinFuture* fut = (JoinFuture*) base;
-
-    // if (fut->)
 
     FutureState state1 = FUTURE_COMPLETED;
     FutureState state2 = FUTURE_COMPLETED;
@@ -90,6 +84,7 @@ FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
     if (!fut->fut2_completed
         || ((fut->base.errcode != JOIN_FUTURE_ERR_FUT2_FAILED) && (fut->base.errcode != JOIN_FUTURE_ERR_BOTH_FUTS_FAILED))
     ) {
+        // allow enqueuing Future* base twice
         state2 = fut2->progress(fut2, mio, waker);
         switch (state2) {
             case FUTURE_COMPLETED:
@@ -106,9 +101,8 @@ FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
         }
     }
 
-    if ((state1 == FUTURE_PENDING) || (state2 == FUTURE_PENDING)) {
+    if ((state1 == FUTURE_PENDING) || (state2 == FUTURE_PENDING))
         return FUTURE_PENDING;
-    }
 
     if ((fut->base.errcode == JOIN_FUTURE_ERR_FUT1_FAILED) 
         || (fut->base.errcode = JOIN_FUTURE_ERR_FUT2_FAILED) 
@@ -119,8 +113,7 @@ FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
         return FUTURE_SUCCESS;
 }
 
-JoinFuture future_join(Future* fut1, Future* fut2)
-{
+JoinFuture future_join(Future* fut1, Future* fut2) {
     return (JoinFuture) {
         .base = future_create(future_join_progress),
         .fut1 = fut1,
@@ -162,6 +155,7 @@ FutureState future_select_progress(Future* base, Mio* mio, Waker waker) {
             break;
     }
 
+    // allow enqueuing Future* base twice
     FutureState state2 = fut2->progress(fut2, mio, waker);
     switch (state2) {
         case FUTURE_COMPLETED:
@@ -183,9 +177,7 @@ FutureState future_select_progress(Future* base, Mio* mio, Waker waker) {
 }
 
 
-SelectFuture future_select(Future* fut1, Future* fut2)
-{
-    UNIMPLEMENTED;
+SelectFuture future_select(Future* fut1, Future* fut2) {
     return (SelectFuture) {
         .base = future_create(future_select_progress),
         .fut1 = fut1,
