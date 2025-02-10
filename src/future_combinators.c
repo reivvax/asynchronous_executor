@@ -11,21 +11,21 @@
 
 FutureState future_then_progress(Future* base, Mio* mio, Waker waker) {
     ThenFuture* fut = (ThenFuture*) base;
-
+    FutureState state;
     if (!fut->fut1_completed) {
         Future* fut1 = fut->fut1;
-        FutureState state = fut1->progress(fut1, mio, waker);
+        state = fut1->progress(fut1, mio, waker);
         switch (state) {
             case FUTURE_COMPLETED:
                 fut->fut1_completed = true;
                 fut->fut2->arg = fut1->ok; // set the argument of another future
                 waker_wake(&waker);
-                return FUTURE_PENDING;
+                break;
             case FUTURE_FAILURE:
                 fut->base.errcode = THEN_FUTURE_ERR_FUT1_FAILED;
-                return FUTURE_FAILURE;
+                break;
             case FUTURE_PENDING:
-                return FUTURE_PENDING;
+                break;
         }
     } else {
         Future* fut2 = fut->fut2;
@@ -40,9 +40,9 @@ FutureState future_then_progress(Future* base, Mio* mio, Waker waker) {
             case FUTURE_PENDING:
                 break;
         }
-
-        return state;
     }
+
+    return state;
 }
 
 ThenFuture future_then(Future* fut1, Future* fut2)
@@ -59,7 +59,65 @@ ThenFuture future_then(Future* fut1, Future* fut2)
 
 FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
     JoinFuture* fut = (JoinFuture*) base;
-    UNIMPLEMENTED;
+
+    FutureState state1 = FUTURE_COMPLETED;
+    FutureState state2 = FUTURE_COMPLETED;
+
+    Future* fut1 = fut->fut1;
+    Future* fut2 = fut->fut2;
+    bool first_progress_called = false;
+
+    if (!fut->fut1_completed 
+        || fut->base.errcode != JOIN_FUTURE_ERR_FUT1_FAILED
+    ) {
+        state1 = fut1->progress(fut1, mio, waker);
+        first_progress_called = true;
+        switch (state1) {
+            case FUTURE_COMPLETED:
+                fut->fut1_completed = true;
+                fut->result.fut1.ok = fut1->ok;
+                break;
+            case FUTURE_FAILURE:
+                fut->base.errcode = 
+                    (fut->base.errcode == JOIN_FUTURE_ERR_FUT2_FAILED ? JOIN_FUTURE_ERR_BOTH_FUTS_FAILED : JOIN_FUTURE_ERR_FUT1_FAILED);
+                fut->result.fut1.errcode = fut1->errcode;
+                break;
+            case FUTURE_PENDING:
+                break;
+        }
+    }
+
+    if (!fut->fut2_completed
+        || ((fut->base.errcode != JOIN_FUTURE_ERR_FUT2_FAILED) && (fut->base.errcode != JOIN_FUTURE_ERR_BOTH_FUTS_FAILED))
+    ) {
+        // ensure we enqueue this future to executor just once
+        state2 = fut2->progress(fut2, mio, first_progress_called ? (Waker) {.executor = NULL, .future = base} : waker);
+        switch (state2) {
+            case FUTURE_COMPLETED:
+                fut->fut2_completed = true;
+                fut->result.fut2.ok = fut2->ok;
+                break;
+            case FUTURE_FAILURE:
+                fut->base.errcode = 
+                    (fut->base.errcode == JOIN_FUTURE_ERR_FUT1_FAILED ? JOIN_FUTURE_ERR_BOTH_FUTS_FAILED : JOIN_FUTURE_ERR_FUT2_FAILED);
+                fut->result.fut2.errcode = fut2->errcode;
+                break;
+            case FUTURE_PENDING:
+                break;
+        }
+    }
+
+    if ((state1 == FUTURE_PENDING) || (state2 == FUTURE_PENDING)) {
+        return FUTURE_PENDING;
+    }
+
+    if ((fut->base.errcode == JOIN_FUTURE_ERR_FUT1_FAILED) 
+        || (fut->base.errcode = JOIN_FUTURE_ERR_FUT2_FAILED) 
+        || (fut->base.errcode == JOIN_FUTURE_ERR_BOTH_FUTS_FAILED)
+    )
+        return FUTURE_FAILURE;
+    else
+        return FUTURE_SUCCESS;
 }
 
 JoinFuture future_join(Future* fut1, Future* fut2)
@@ -70,7 +128,10 @@ JoinFuture future_join(Future* fut1, Future* fut2)
         .fut2 = fut2,
         .fut1_completed = false,
         .fut2_completed = false,
-        .result = {0}
+        .result = {
+            .fut1 = {.ok = NULL, .errcode = FUTURE_SUCCESS},
+            .fut2 = {.ok = NULL, .errcode = FUTURE_SUCCESS}
+        }
     };
 }
 

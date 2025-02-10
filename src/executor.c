@@ -38,7 +38,8 @@ Executor* executor_create(size_t max_queue_size) {
 
 void waker_wake(Waker* waker) {
     Executor* exec = (Executor*) waker->executor;
-    queue_push(&exec->futures_queue, waker->future);
+    if (exec)
+        queue_push(&exec->futures_queue, waker->future);
 }
 
 void executor_spawn(Executor* executor, Future* fut) {
