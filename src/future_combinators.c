@@ -17,7 +17,7 @@ FutureState future_then_progress(Future* base, Mio* mio, Waker waker) {
                 fut->fut1_completed = true;
                 fut->fut2->arg = fut1->ok; // set the argument of another future
                 waker_wake(&waker);
-                break;
+                return FUTURE_PENDING;
             case FUTURE_FAILURE:
                 fut->base.errcode = THEN_FUTURE_ERR_FUT1_FAILED;
                 break;

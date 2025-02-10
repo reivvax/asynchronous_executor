@@ -15,9 +15,12 @@ target_link_libraries(mio_test executor mio future test_utils)
 add_executable(then_test then_test.c)
 target_link_libraries(then_test executor mio future err test_utils)
 
+add_executable(join_test join_test.c)
+target_link_libraries(join_test executor mio future err test_utils)
 
 enable_testing()
 add_test(NAME ExecutorTest COMMAND executor_test)
 add_test(NAME HardWorkTest COMMAND hard_work_test)
 add_test(NAME MioTest COMMAND mio_test)
 add_test(NAME ThenTest COMMAND then_test)
+add_test(NAME JoinTest COMMAND join_test)
