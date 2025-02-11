@@ -34,14 +34,205 @@ void* capitalize(void* arg)
     return buffer;
 }
 
-void test_join() {
+void test_join_1() {
+    Executor* executor = executor_create(42);
 
+    // Create a pipe that will be filled with `message` 3 bytes at a time,
+    // then wait 2 seconds before closing the write end.
+    const char* message = "aaabbbcccd\n";
+    int read_fd = create_example_read_pipe_end(message, 3, 0, 2);
+
+    // Make a future that reads the message from the pipe, then capitalizes it, the prints it.
+    // This should succeed, because we read exactly all the bytes of message, including '\0'.
+    uint8_t buffer[strlen(message) + 1];
+    PipeReadFuture f1 = pipe_read_future_create(read_fd, buffer, sizeof(buffer));
+    Future* good_future = (Future*)&f1;
+
+    // Make another future for another pipe, as before, but with a larger buffer.
+    // This should progress concurrently with good_future, but eventually fail
+    // (only after the write-end of the pipe is closed), because there aren't enough bytes to read.
+    read_fd = create_example_read_pipe_end(message, 3, 0, 2);
+    uint8_t large_buffer[1000];
+    PipeReadFuture f1_bad = pipe_read_future_create(read_fd, large_buffer, sizeof(large_buffer));
+    Future* bad_future = (Future*)&f1_bad;
+
+    JoinFuture joined = future_join(good_future, bad_future);
+
+    executor_spawn(executor, (Future*)&joined);
+
+    // Run the executor
+    executor_run(executor);
+
+    // Check everything is as expected.
+    assert(good_future->errcode == FUTURE_SUCCESS);
+    assert(good_future->ok == buffer);
+    assert(memcmp(buffer, message, sizeof(buffer)) == 0);
+
+    assert(f1_bad.base.errcode == PIPE_FUTURE_ERR_EOF); // f1_bad failed because it reached EOF.
+    assert(memcmp(large_buffer, message, sizeof(buffer)) == 0);
+
+    assert(joined.fut1_completed == true);
+    assert(joined.fut2_completed == false);
+    assert(joined.result.fut1.ok == buffer);
+    assert(joined.result.fut2.errcode == PIPE_FUTURE_ERR_EOF);
+    assert(joined.base.errcode == JOIN_FUTURE_ERR_FUT2_FAILED);
+
+    // Destroy the executor
+    executor_destroy(executor);
+
+    debug("test_join_1 passed\n");
+}
+
+void test_join_2() {
+    Executor* executor = executor_create(42);
+
+    // Create a pipe that will be filled with `message` 3 bytes at a time,
+    // then wait 2 seconds before closing the write end.
+    const char* message = "aaabbbcccd\n";
+    int read_fd = create_example_read_pipe_end(message, 3, 0, 2);
+
+    // Make a future that reads the message from the pipe, then capitalizes it, the prints it.
+    // This should succeed, because we read exactly all the bytes of message, including '\0'.
+    uint8_t buffer[strlen(message) + 1];
+    PipeReadFuture f1 = pipe_read_future_create(read_fd, buffer, sizeof(buffer));
+    Future* good_future = (Future*)&f1;
+
+    // Make another future for another pipe, as before, but with a larger buffer.
+    // This should progress concurrently with good_future, but eventually fail
+    // (only after the write-end of the pipe is closed), because there aren't enough bytes to read.
+    read_fd = create_example_read_pipe_end(message, 3, 0, 2);
+    uint8_t large_buffer[1000];
+    PipeReadFuture f1_bad = pipe_read_future_create(read_fd, large_buffer, sizeof(large_buffer));
+    Future* bad_future = (Future*)&f1_bad;
+
+    JoinFuture joined = future_join(bad_future, good_future);
+
+    executor_spawn(executor, (Future*)&joined);
+
+    // Run the executor
+    executor_run(executor);
+
+    // Check everything is as expected.
+    assert(good_future->errcode == FUTURE_SUCCESS);
+    assert(good_future->ok == buffer);
+    assert(memcmp(buffer, message, sizeof(buffer)) == 0);
+
+    assert(f1_bad.base.errcode == PIPE_FUTURE_ERR_EOF); // f1_bad failed because it reached EOF.
+    assert(memcmp(large_buffer, message, sizeof(buffer)) == 0);
+
+    assert(joined.fut2_completed == true);
+    assert(joined.fut1_completed == false);
+    assert(joined.result.fut2.ok == buffer);
+    assert(joined.result.fut1.errcode == PIPE_FUTURE_ERR_EOF);
+    assert(joined.base.errcode == JOIN_FUTURE_ERR_FUT1_FAILED);
+
+    // Destroy the executor
+    executor_destroy(executor);
+
+    debug("test_join_2 passed\n");
+}
+
+void test_join_both_succeed() {
+    Executor* executor = executor_create(42);
+
+    // Create a pipe that will be filled with `message` 3 bytes at a time,
+    // then wait 2 seconds before closing the write end.
+    const char* message = "aaabbbcccd\n";
+    int read_fd = create_example_read_pipe_end(message, 3, 0, 2);
+
+    // Make a future that reads the message from the pipe, then capitalizes it, the prints it.
+    // This should succeed, because we read exactly all the bytes of message, including '\0'.
+    uint8_t buffer[strlen(message) + 1];
+    PipeReadFuture f1 = pipe_read_future_create(read_fd, buffer, sizeof(buffer));
+    Future* good_future_1 = (Future*)&f1;
+
+    // Make another future for another pipe, as before, but with a larger buffer.
+    // This should progress concurrently with good_future, but eventually fail
+    // (only after the write-end of the pipe is closed), because there aren't enough bytes to read.
+    read_fd = create_example_read_pipe_end(message, 3, 0, 2);
+    uint8_t large_buffer[strlen(message) + 1];
+    PipeReadFuture f2 = pipe_read_future_create(read_fd, large_buffer, sizeof(large_buffer));
+    Future* good_future_2 = (Future*)&f2;
+
+    JoinFuture joined = future_join(good_future_1, good_future_2);
+
+    executor_spawn(executor, (Future*)&joined);
+
+    // Run the executor
+    executor_run(executor);
+
+    // Check everything is as expected.
+    assert(good_future_1->errcode == FUTURE_SUCCESS);
+    assert(good_future_1->ok == buffer);
+    assert(memcmp(buffer, message, sizeof(buffer)) == 0);
+
+    assert(good_future_2->errcode == FUTURE_SUCCESS);
+    assert(good_future_2->ok == large_buffer);
+    assert(memcmp(large_buffer, message, sizeof(buffer)) == 0);
+
+    assert(joined.fut1_completed == true);
+    assert(joined.fut2_completed == true);
+    assert(joined.result.fut1.ok == buffer);
+    assert(joined.result.fut2.ok == large_buffer);
+    debug("%d\n", joined.base.errcode);
+    assert(joined.base.errcode == FUTURE_SUCCESS);
+
+    // Destroy the executor
+    executor_destroy(executor);
+
+    debug("test_join_both_succeed passed\n");
+}
+
+void test_join_both_fail() {
+    Executor* executor = executor_create(42);
+
+    // Create a pipe that will be filled with `message` 3 bytes at a time,
+    // then wait 2 seconds before closing the write end.
+    const char* message = "aaabbbcccd\n";
+    int read_fd = create_example_read_pipe_end(message, 3, 0, 2);
+
+    // Make a future that reads the message from the pipe, then capitalizes it, the prints it.
+    // This should succeed, because we read exactly all the bytes of message, including '\0'.
+    uint8_t buffer[100];
+    PipeReadFuture f1_bad = pipe_read_future_create(read_fd, buffer, sizeof(buffer));
+    Future* bad_future_1 = (Future*)&f1_bad;
+
+    // Make another future for another pipe, as before, but with a larger buffer.
+    // This should progress concurrently with good_future, but eventually fail
+    // (only after the write-end of the pipe is closed), because there aren't enough bytes to read.
+    read_fd = create_example_read_pipe_end(message, 3, 0, 2);
+    uint8_t large_buffer[1000];
+    PipeReadFuture f2_bad = pipe_read_future_create(read_fd, large_buffer, sizeof(large_buffer));
+    Future* bad_future_2 = (Future*)&f2_bad;
+
+    JoinFuture joined = future_join(bad_future_1, bad_future_2);
+
+    executor_spawn(executor, (Future*)&joined);
+
+    // Run the executor
+    executor_run(executor);
+
+    // Check everything is as expected.
+    assert(bad_future_1->errcode == PIPE_FUTURE_ERR_EOF);
+    assert(memcmp(buffer, message, sizeof(message) + 1) == 0); // the buffer was capitalized.
+
+    assert(f1_bad.base.errcode == PIPE_FUTURE_ERR_EOF); // f1_bad failed because it reached EOF.
+    assert(memcmp(large_buffer, message, sizeof(message) + 1) == 0);
+
+    assert(joined.fut1_completed == false);
+    assert(joined.fut2_completed == false);
+    assert(joined.result.fut1.errcode == PIPE_FUTURE_ERR_EOF);
+    assert(joined.result.fut2.errcode == PIPE_FUTURE_ERR_EOF);
+    assert(joined.base.errcode == JOIN_FUTURE_ERR_BOTH_FUTS_FAILED);
+
+    // Destroy the executor
+    executor_destroy(executor);
+
+    debug("test_join_both_fail passed\n");
 }
 
 void test_then_and_join()
 {
-    // An end-to-end test that demonstrates the use of ThenFuture to chain futures.
-
     Executor* executor = executor_create(42);
 
     // Create a pipe that will be filled with `message` 3 bytes at a time,
@@ -97,10 +288,16 @@ void test_then_and_join()
 
     // Destroy the executor
     executor_destroy(executor);
+
+    debug("test_then_and_join passed\n");
 }
 
 int main() {
-    test_join();
+    test_join_1();
+    test_join_2();
+    test_join_both_succeed();
+    test_join_both_fail();
     test_then_and_join();
+    debug("ALL TESTS PASSED\n");
     return 0;
 }
