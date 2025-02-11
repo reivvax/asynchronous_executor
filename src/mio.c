@@ -16,6 +16,7 @@
 #define MAX_EVENTS 64
 
 struct Mio {
+    Executor* executor;
     int registered_events_count;
     int epoll_fd;
     struct epoll_event events[MAX_EVENTS];
@@ -32,6 +33,7 @@ Mio* mio_create(Executor* executor) {
         return NULL;
     }
 
+    res->executor = executor;
     res->epoll_fd = epoll_fd;
     return res;
 }
@@ -44,15 +46,9 @@ void mio_destroy(Mio* mio) {
 int mio_register(Mio* mio, int fd, uint32_t events, Waker waker) {
     debug("Registering (in Mio = %p) fd = %d\n", mio, fd);
 
-    Waker* waker_copy = (Waker*) malloc(sizeof(Waker));
-    if (!waker_copy)
-        return -1;
-
-    *waker_copy = waker;
-
     struct epoll_event ev;
     ev.events = events;
-    ev.data.ptr = (void*) waker_copy;
+    ev.data.ptr = (void*) waker.future;
     int res = epoll_ctl(mio->epoll_fd, EPOLL_CTL_ADD, fd, &ev);
     
     if (res == 0)
@@ -82,9 +78,9 @@ void mio_poll(Mio* mio) {
         int event_count = epoll_wait(mio->epoll_fd, mio->events, MAX_EVENTS, -1);
         ASSERT_SYS_OK(event_count);
         for (int i = 0; i < event_count; i++) {
-            Waker* waker = (Waker*) mio->events[i].data.ptr;
-            waker_wake(waker);
-            free(waker);
+            Future* fut = (Future*) mio->events[i].data.ptr;
+            Waker waker = (Waker) {.executor = mio->executor, .future = fut};
+            waker_wake(&waker);
         }
     }
 }
