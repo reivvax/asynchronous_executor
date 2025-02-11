@@ -23,8 +23,6 @@ FutureState future_then_progress(Future* base, Mio* mio, Waker waker) {
                 break;
             case FUTURE_PENDING:
                 break;
-            default:
-                debug("SOMETHINGS WRONG IN THENFUTURE = %p\n", fut);
         }
     } else {
         Future* fut2 = fut->fut2;
@@ -38,8 +36,6 @@ FutureState future_then_progress(Future* base, Mio* mio, Waker waker) {
                 break;
             case FUTURE_PENDING:
                 break;
-            default:
-                debug("SOMETHINGS WRONG IN THENFUTURE = %p\n", fut);
         }
     }
 
@@ -70,10 +66,8 @@ FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
         || ((fut->base.errcode != JOIN_FUTURE_ERR_FUT1_FAILED) && (fut->base.errcode != JOIN_FUTURE_ERR_BOTH_FUTS_FAILED))
     ) {
         state1 = fut1->progress(fut1, mio, waker);
-        debug("Calling fut1->progress() in JoinFuture = %p, got state %d\n", fut, state1);
         switch (state1) {
             case FUTURE_COMPLETED:
-                debug("fut1->progress() in JoinFuture = %p returned COMPLETED, fut1->ok = %p\n", fut1, fut1->ok);
                 fut->fut1_completed = true;
                 fut->result.fut1.ok = fut1->ok;
                 break;
@@ -84,8 +78,6 @@ FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
                 break;
             case FUTURE_PENDING:
                 break;
-            default:
-                debug("SOMETHINGS WRONG IN JOINFUTURE = %p\n", fut);
         }
     }
 
@@ -94,10 +86,8 @@ FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
     ) {
         // allow enqueuing Future* base twice
         state2 = fut2->progress(fut2, mio, waker);
-        debug("Calling fut2->progress() in JoinFuture = %p, got state %d\n", fut, state2);
         switch (state2) {
             case FUTURE_COMPLETED:        
-                debug("fut2->progress() in JoinFuture = %p returned COMPLETED, fut2->ok = %p\n", fut2, fut2->ok);
                 fut->fut2_completed = true;
                 fut->result.fut2.ok = fut2->ok;
                 break;
@@ -108,8 +98,6 @@ FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
                 break;
             case FUTURE_PENDING:
                 break;
-            default:
-                debug("SOMETHINGS WRONG IN JOINFUTURE = %p\n", fut);
         }
     }
 
