@@ -214,10 +214,10 @@ void test_join_both_fail() {
 
     // Check everything is as expected.
     assert(bad_future_1->errcode == PIPE_FUTURE_ERR_EOF);
-    assert(memcmp(buffer, message, sizeof(message) + 1) == 0); // the buffer was capitalized.
+    assert(memcmp(buffer, message, strlen(message) + 1) == 0); // the buffer was capitalized.
 
     assert(f1_bad.base.errcode == PIPE_FUTURE_ERR_EOF); // f1_bad failed because it reached EOF.
-    assert(memcmp(large_buffer, message, sizeof(message) + 1) == 0);
+    assert(memcmp(large_buffer, message, strlen(message) + 1) == 0);
 
     assert(joined.fut1_completed == false);
     assert(joined.fut2_completed == false);
