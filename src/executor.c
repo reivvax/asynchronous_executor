@@ -38,7 +38,7 @@ Executor* executor_create(size_t max_queue_size) {
 
 void waker_wake(Waker* waker) {
     Executor* exec = (Executor*) waker->executor;
-    if (exec)
+    if (exec && waker->future)
         queue_push(&exec->futures_queue, waker->future);
 }
 
@@ -65,7 +65,9 @@ void executor_run(Executor* executor) {
                     break;
             }
         }
+        debug("Executors queue size before poll = %d\n", q->size);
         mio_poll(executor->mio);
+        debug("Executors queue size after poll = %d\n", q->size);
     }
 }
 

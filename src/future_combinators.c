@@ -129,9 +129,10 @@ JoinFuture future_join(Future* fut1, Future* fut2) {
 
 FutureState future_select_progress(Future* base, Mio* mio, Waker waker) {
     SelectFuture* fut = (SelectFuture*) base;
-
-    if (fut->which_completed == SELECT_COMPLETED_FUT1 || fut->which_completed == SELECT_COMPLETED_FUT2) {
+    debug("ENTERING SELECT FUTURE\n");
+    if ((fut->which_completed == SELECT_COMPLETED_FUT1) || (fut->which_completed == SELECT_COMPLETED_FUT2)) {
         fut->base.errcode = FUTURE_SUCCESS;
+        debug("RETURNING EARLY...\n");
         return FUTURE_COMPLETED;
     }
 
@@ -139,12 +140,14 @@ FutureState future_select_progress(Future* base, Mio* mio, Waker waker) {
     Future* fut2 = fut->fut2;
     
     FutureState state1 = fut1->progress(fut1, mio, waker);
+    debug("FUT1 returned state = %d\n", state1);
     switch (state1) {
         case FUTURE_COMPLETED:
             fut->which_completed = SELECT_COMPLETED_FUT1;
             fut->base.errcode = FUTURE_SUCCESS;
             return FUTURE_COMPLETED;
         case FUTURE_FAILURE:
+            fut->base.errcode = fut1->errcode;
             if (fut->which_completed == SELECT_FAILED_FUT2) {
                 fut->which_completed = SELECT_FAILED_BOTH;
                 return FUTURE_FAILURE;
@@ -156,14 +159,16 @@ FutureState future_select_progress(Future* base, Mio* mio, Waker waker) {
             break;
     }
 
-    // allow enqueuing Future* base twice
-    FutureState state2 = fut2->progress(fut2, mio, waker);
+    // don't allow enqueuing Future* base twice
+    FutureState state2 = fut2->progress(fut2, mio, (Waker) {.executor = NULL, .future = fut2});
+    debug("FUT2 returned state = %d\n", state2);
     switch (state2) {
         case FUTURE_COMPLETED:
             fut->which_completed = SELECT_COMPLETED_FUT2;
             fut->base.errcode = FUTURE_SUCCESS;
             return FUTURE_COMPLETED;
         case FUTURE_FAILURE:
+            fut->base.errcode = fut2->errcode;
             if (fut->which_completed == SELECT_FAILED_FUT1) {
                 fut->which_completed = SELECT_FAILED_BOTH;
                 return FUTURE_FAILURE;

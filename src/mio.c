@@ -54,7 +54,7 @@ int mio_register(Mio* mio, int fd, uint32_t events, Waker waker) {
     if (res == 0)
         mio->registered_events_count++;
     else if (res == -1 && errno == EEXIST)
-        res = epoll_ctl(mio->epoll_fd, EPOLL_CTL_MOD, fd, &ev);
+        res = 0;
 
     return res;
 }
@@ -72,14 +72,16 @@ int mio_unregister(Mio* mio, int fd) {
 }
 
 void mio_poll(Mio* mio) {
-    debug("Mio (%p) polling\n", mio);
+    debug("Mio (%p) polling, number of registered_events = %d\n", mio, mio->registered_events_count);
 
     if (mio->registered_events_count > 0) {
         int event_count = epoll_wait(mio->epoll_fd, mio->events, MAX_EVENTS, -1);
         ASSERT_SYS_OK(event_count);
+        debug("MIO EVENTS COUNT = %d\n", event_count);
         for (int i = 0; i < event_count; i++) {
             Future* fut = (Future*) mio->events[i].data.ptr;
             Waker waker = (Waker) {.executor = mio->executor, .future = fut};
+            debug("Waker exec = %p, Waker fut = %p\n", waker.executor, waker.future);
             waker_wake(&waker);
         }
     }
