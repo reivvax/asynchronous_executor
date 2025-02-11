@@ -62,9 +62,7 @@ FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
     Future* fut1 = fut->fut1;
     Future* fut2 = fut->fut2;
 
-    if (!fut->fut1_completed 
-        || ((fut->base.errcode != JOIN_FUTURE_ERR_FUT1_FAILED) && (fut->base.errcode != JOIN_FUTURE_ERR_BOTH_FUTS_FAILED))
-    ) {
+    if (!fut->fut1_completed && ((fut->base.errcode == JOIN_FUTURE_ERR_FUT2_FAILED) || (fut->base.errcode == FUTURE_SUCCESS))) {
         state1 = fut1->progress(fut1, mio, waker);
         switch (state1) {
             case FUTURE_COMPLETED:
@@ -81,9 +79,7 @@ FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
         }
     }
 
-    if (!fut->fut2_completed
-        || ((fut->base.errcode != JOIN_FUTURE_ERR_FUT2_FAILED) && (fut->base.errcode != JOIN_FUTURE_ERR_BOTH_FUTS_FAILED))
-    ) {
+    if (!fut->fut2_completed && ((fut->base.errcode == JOIN_FUTURE_ERR_FUT1_FAILED) || (fut->base.errcode == FUTURE_SUCCESS))) {
         // allow enqueuing Future* base twice
         state2 = fut2->progress(fut2, mio, waker);
         switch (state2) {
@@ -105,12 +101,14 @@ FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
         return FUTURE_PENDING;
 
     if ((fut->base.errcode == JOIN_FUTURE_ERR_FUT1_FAILED) 
-        || (fut->base.errcode = JOIN_FUTURE_ERR_FUT2_FAILED) 
+        || (fut->base.errcode == JOIN_FUTURE_ERR_FUT2_FAILED) 
         || (fut->base.errcode == JOIN_FUTURE_ERR_BOTH_FUTS_FAILED)
-    )
+    ) {
         return FUTURE_FAILURE;
-    else
+    } else {
+        fut->base.errcode = FUTURE_SUCCESS;
         return FUTURE_SUCCESS;
+    }
 }
 
 JoinFuture future_join(Future* fut1, Future* fut2) {
@@ -132,8 +130,10 @@ JoinFuture future_join(Future* fut1, Future* fut2) {
 FutureState future_select_progress(Future* base, Mio* mio, Waker waker) {
     SelectFuture* fut = (SelectFuture*) base;
 
-    if (fut->which_completed == SELECT_COMPLETED_FUT1 || fut->which_completed == SELECT_COMPLETED_FUT2)
+    if (fut->which_completed == SELECT_COMPLETED_FUT1 || fut->which_completed == SELECT_COMPLETED_FUT2) {
+        fut->base.errcode = FUTURE_SUCCESS;
         return FUTURE_COMPLETED;
+    }
 
     Future* fut1 = fut->fut1;
     Future* fut2 = fut->fut2;
@@ -142,6 +142,7 @@ FutureState future_select_progress(Future* base, Mio* mio, Waker waker) {
     switch (state1) {
         case FUTURE_COMPLETED:
             fut->which_completed = SELECT_COMPLETED_FUT1;
+            fut->base.errcode = FUTURE_SUCCESS;
             return FUTURE_COMPLETED;
         case FUTURE_FAILURE:
             if (fut->which_completed == SELECT_FAILED_FUT2) {
@@ -160,6 +161,7 @@ FutureState future_select_progress(Future* base, Mio* mio, Waker waker) {
     switch (state2) {
         case FUTURE_COMPLETED:
             fut->which_completed = SELECT_COMPLETED_FUT2;
+            fut->base.errcode = FUTURE_SUCCESS;
             return FUTURE_COMPLETED;
         case FUTURE_FAILURE:
             if (fut->which_completed == SELECT_FAILED_FUT1) {
