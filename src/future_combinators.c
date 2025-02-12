@@ -4,6 +4,16 @@
 #include "future.h"
 #include "waker.h"
 
+#define ASSERT_MALLOC_SUCCEEDED(expr)                                          \
+    do {                                                                       \
+        if ((expr) == NULL) {                                                  \
+            fprintf(stderr,                                                    \
+            "Memory allocation failed in %s:%d: In function %s():\n\t",        \
+            __FILE__, __LINE__, __func__);                                     \
+            exit(EXIT_FAILURE);                                                \
+        }                                                                      \
+    } while (0)
+
 // ========================= ThenFuture =========================
 
 FutureState future_then_progress(Future* base, Mio* mio, Waker waker) {
@@ -55,41 +65,50 @@ ThenFuture future_then(Future* fut1, Future* fut2) {
 
 typedef struct JoinWrapperFuture {
     Future base;
-    JoinFuture* parent;
+    Future* subtask;
     bool is_first_child;
 } JoinWrapperFuture;
 
 FutureState future_join_wrapper_progress(Future* base, Mio* mio, Waker waker) {
+    debug("ENTERING WRAPPER PROGRESS\n");
     JoinWrapperFuture* fut = (JoinWrapperFuture*) fut;
-    FutureState state = base->progress(base, mio, waker);
+    JoinFuture* parent = (JoinFuture*) waker.future;
+    Future* subtask = fut->subtask;
+    debug("before call\n");
+    FutureState state = subtask->progress(subtask, mio, (Waker) {.executor = waker.executor, .future = base});
+    debug("after call\n");
+    FutureState* my_state = (fut->is_first_child ? &parent->fut1_completed : &parent->fut2_completed);
+    FutureState* sibling_state = fut->is_first_child ? &parent->fut2_completed : &parent->fut1_completed;
+    int check_sibling_failed_value;
+
     switch (state) {
         case FUTURE_COMPLETED:
-            bool* my_completion = fut->is_first_child ? &fut->parent->fut1_completed : &fut->parent->fut2_completed;
-            bool* sibling_completion = fut->is_first_child ? &fut->parent->fut2_completed : &fut->parent->fut1_completed;
-            int check_sibling_failed_value = fut->is_first_child ? JOIN_FUTURE_ERR_FUT2_FAILED : JOIN_FUTURE_ERR_FUT1_FAILED;
-            void** future_ok_address = fut->is_first_child ? &fut->parent->result.fut1.ok : &fut->parent->result.fut2.ok;
-            
-            *my_completion = true;
-            *future_ok_address = fut->base.ok;
- 
-            if (*sibling_completion || (fut->parent->base.errcode == check_sibling_failed_value)) { // wake up parent if we are the second one finished
-                Waker paren_waker = (Waker) {.executor = waker.executor, .future = (Future*) fut->parent};
-                waker_wake(&paren_waker);
-            }
+            check_sibling_failed_value = fut->is_first_child ? JOIN_FUTURE_ERR_FUT2_FAILED : JOIN_FUTURE_ERR_FUT1_FAILED;
+            // void** future_ok_address = fut->is_first_child ? &parent->result.fut1.ok : &parent->result.fut2.ok;
+
+            *my_state = FUTURE_COMPLETED;
+            if (fut->is_first_child)
+                parent->result.fut1.ok = fut->base.ok;
+            else
+                parent->result.fut2.ok = fut->base.ok;
+            // *future_ok_address = fut->base.ok;
+
+            if (*sibling_state == FUTURE_COMPLETED || (parent->base.errcode == check_sibling_failed_value)) // wake up parent if we are the second one finished
+                waker_wake(&waker);
+
             break;
         case FUTURE_FAILURE:
-            bool* sibling_completion = fut->is_first_child ? &fut->parent->fut2_completed : &fut->parent->fut1_completed;
-            int* future_errcode_address = fut->is_first_child ? &fut->parent->result.fut1.errcode : &fut->parent->result.fut2.errcode;
+            int* future_errcode_address = fut->is_first_child ? &parent->result.fut1.errcode : &parent->result.fut2.errcode;
             int fail_values[2] = {JOIN_FUTURE_ERR_FUT1_FAILED, JOIN_FUTURE_ERR_FUT2_FAILED};
-            int check_sibling_failed_value = fail_values[fut->is_first_child];
-            
-            *future_errcode_address = base->errcode;
-            fut->parent->base.errcode = (fut->parent->base.errcode == check_sibling_failed_value ? JOIN_FUTURE_ERR_BOTH_FUTS_FAILED : fail_values[1 - fut->is_first_child]);
+            check_sibling_failed_value = fail_values[fut->is_first_child];
 
-            if (*sibling_completion || (fut->parent->base.errcode == JOIN_FUTURE_ERR_BOTH_FUTS_FAILED)) { // wake up parent if we are the second one finished
-                Waker paren_waker = (Waker) {.executor = waker.executor, .future = (Future*) fut->parent};
-                waker_wake(&paren_waker);
-            }
+            *my_state = FUTURE_COMPLETED;
+            *future_errcode_address = base->errcode;
+            parent->base.errcode = (parent->base.errcode == check_sibling_failed_value ? JOIN_FUTURE_ERR_BOTH_FUTS_FAILED : fail_values[1 - fut->is_first_child]);
+
+            if (*sibling_state == FUTURE_COMPLETED || (parent->base.errcode == JOIN_FUTURE_ERR_BOTH_FUTS_FAILED)) // wake up parent if we are the second one finished
+                waker_wake(&waker);
+
             break;
         case FUTURE_PENDING:
             break;
@@ -97,81 +116,50 @@ FutureState future_join_wrapper_progress(Future* base, Mio* mio, Waker waker) {
     return state;
 }
 
-JoinWrapperFuture join_wrapper_future(Future* parent, bool is_first_child) {
-    return (JoinWrapperFuture) {
+JoinWrapperFuture* join_wrapper_future(Future* subtask, bool is_first_child) {
+    JoinWrapperFuture* res = (JoinWrapperFuture*) malloc(sizeof(JoinWrapperFuture));
+    ASSERT_MALLOC_SUCCEEDED(res);
+
+    *res = (JoinWrapperFuture) {
         .base = future_create(future_join_wrapper_progress),
-        .parent = parent,
+        .subtask = subtask,
         .is_first_child = is_first_child
     };
+    return res;
 }
 
 // ========================= JoinFuture =========================
 
 FutureState future_join_progress(Future* base, Mio* mio, Waker waker) {
+    debug("ENTERING JOIN PROGRESS\n");
     JoinFuture* fut = (JoinFuture*) base;
-
-    FutureState state1 = FUTURE_COMPLETED;
-    FutureState state2 = FUTURE_COMPLETED;
-
-    Future* fut1 = fut->fut1;
-    Future* fut2 = fut->fut2;
-
-    if (!fut->fut1_completed && ((fut->base.errcode == JOIN_FUTURE_ERR_FUT2_FAILED) || (fut->base.errcode == FUTURE_SUCCESS))) {
-        state1 = fut1->progress(fut1, mio, waker);
-        switch (state1) {
-            case FUTURE_COMPLETED:
-                fut->fut1_completed = true;
-                fut->result.fut1.ok = fut1->ok;
-                break;
-            case FUTURE_FAILURE:
-                fut->base.errcode = 
-                    (fut->base.errcode == JOIN_FUTURE_ERR_FUT2_FAILED ? JOIN_FUTURE_ERR_BOTH_FUTS_FAILED : JOIN_FUTURE_ERR_FUT1_FAILED);
-                fut->result.fut1.errcode = fut1->errcode;
-                break;
-            case FUTURE_PENDING:
-                break;
-        }
-    }
-
-    if (!fut->fut2_completed && ((fut->base.errcode == JOIN_FUTURE_ERR_FUT1_FAILED) || (fut->base.errcode == FUTURE_SUCCESS))) {
-        // allow enqueuing Future* base twice
-        state2 = fut2->progress(fut2, mio, waker);
-        switch (state2) {
-            case FUTURE_COMPLETED:        
-                fut->fut2_completed = true;
-                fut->result.fut2.ok = fut2->ok;
-                break;
-            case FUTURE_FAILURE:
-                fut->base.errcode = 
-                    (fut->base.errcode == JOIN_FUTURE_ERR_FUT1_FAILED ? JOIN_FUTURE_ERR_BOTH_FUTS_FAILED : JOIN_FUTURE_ERR_FUT2_FAILED);
-                fut->result.fut2.errcode = fut2->errcode;
-                break;
-            case FUTURE_PENDING:
-                break;
-        }
-    }
-
-    if ((state1 == FUTURE_PENDING) || (state2 == FUTURE_PENDING))
-        return FUTURE_PENDING;
 
     if ((fut->base.errcode == JOIN_FUTURE_ERR_FUT1_FAILED) 
         || (fut->base.errcode == JOIN_FUTURE_ERR_FUT2_FAILED) 
         || (fut->base.errcode == JOIN_FUTURE_ERR_BOTH_FUTS_FAILED)
     ) {
         return FUTURE_FAILURE;
-    } else {
+    } else if (fut->fut1_completed != FUTURE_PENDING && fut->fut2_completed != FUTURE_PENDING) {
         fut->base.errcode = FUTURE_SUCCESS;
         return FUTURE_SUCCESS;
     }
+
+    Future* fut1 = fut->fut1;
+    Future* fut2 = fut->fut2;
+
+    fut1->progress(fut1, mio, waker);
+    fut2->progress(fut2, mio, waker);
+
+    return FUTURE_PENDING;
 }
 
 JoinFuture future_join(Future* fut1, Future* fut2) {
     return (JoinFuture) {
         .base = future_create(future_join_progress),
-        .fut1 = fut1,
-        .fut2 = fut2,
-        .fut1_completed = false,
-        .fut2_completed = false,
+        .fut1 = (Future*) join_wrapper_future(fut1, true),
+        .fut2 = (Future*) join_wrapper_future(fut2, false),
+        .fut1_completed = FUTURE_PENDING,
+        .fut2_completed = FUTURE_PENDING,
         .result = {
             .fut1 = {.ok = NULL, .errcode = FUTURE_SUCCESS},
             .fut2 = {.ok = NULL, .errcode = FUTURE_SUCCESS}

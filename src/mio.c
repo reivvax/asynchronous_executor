@@ -5,7 +5,6 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 
-#include "utils.h"
 #include "err.h"
 #include "debug.h"
 #include "executor.h"

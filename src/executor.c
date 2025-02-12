@@ -5,12 +5,21 @@
 #include <stdlib.h>
 
 #include "debug.h"
-#include "utils.h"
 #include "err.h"
 #include "future.h"
 #include "mio.h"
 #include "waker.h"
 #include "queue.h"
+
+#define ASSERT_MALLOC_SUCCEEDED(expr)                                          \
+    do {                                                                       \
+        if ((expr) == NULL) {                                                  \
+            fprintf(stderr,                                                    \
+            "Memory allocation failed in %s:%d: In function %s():\n\t",        \
+            __FILE__, __LINE__, __func__);                                     \
+            exit(EXIT_FAILURE);                                                \
+        }                                                                      \
+    } while (0)
 
 /**
  * @brief Structure to represent the current-thread executor.
@@ -65,9 +74,9 @@ void executor_run(Executor* executor) {
                     break;
             }
         }
-        debug("Executors queue size before poll = %d\n", q->size);
+        // debug("Executors queue size before poll = %d\n", q->size);
         mio_poll(executor->mio);
-        debug("Executors queue size after poll = %d\n", q->size);
+        // debug("Executors queue size after poll = %d\n", q->size);
     }
 }
 
