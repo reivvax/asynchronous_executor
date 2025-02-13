@@ -71,8 +71,8 @@ void test_join_1() {
     assert(f1_bad.base.errcode == PIPE_FUTURE_ERR_EOF); // f1_bad failed because it reached EOF.
     assert(memcmp(large_buffer, message, sizeof(buffer)) == 0);
 
-    assert(joined.fut1_completed == true);
-    assert(joined.fut2_completed == false);
+    assert(joined.fut1_completed == FUTURE_COMPLETED);
+    assert(joined.fut2_completed == FUTURE_FAILURE);
     assert(joined.result.fut1.ok == buffer);
     assert(joined.result.fut2.errcode == PIPE_FUTURE_ERR_EOF);
     assert(joined.base.errcode == JOIN_FUTURE_ERR_FUT2_FAILED);
@@ -120,8 +120,8 @@ void test_join_2() {
     assert(f1_bad.base.errcode == PIPE_FUTURE_ERR_EOF); // f1_bad failed because it reached EOF.
     assert(memcmp(large_buffer, message, sizeof(buffer)) == 0);
 
-    assert(joined.fut2_completed == true);
-    assert(joined.fut1_completed == false);
+    assert(joined.fut2_completed == FUTURE_COMPLETED);
+    assert(joined.fut1_completed == FUTURE_FAILURE);
     assert(joined.result.fut2.ok == buffer);
     assert(joined.result.fut1.errcode == PIPE_FUTURE_ERR_EOF);
     assert(joined.base.errcode == JOIN_FUTURE_ERR_FUT1_FAILED);
@@ -170,8 +170,8 @@ void test_join_both_succeed() {
     assert(good_future_2->ok == large_buffer);
     assert(memcmp(large_buffer, message, sizeof(buffer)) == 0);
 
-    assert(joined.fut1_completed == true);
-    assert(joined.fut2_completed == true);
+    assert(joined.fut1_completed == FUTURE_COMPLETED);
+    assert(joined.fut2_completed == FUTURE_COMPLETED);
     assert(joined.result.fut1.ok == buffer);
     assert(joined.result.fut2.ok == large_buffer);
     debug("%d\n", joined.base.errcode);
@@ -219,8 +219,8 @@ void test_join_both_fail() {
     assert(f1_bad.base.errcode == PIPE_FUTURE_ERR_EOF); // f1_bad failed because it reached EOF.
     assert(memcmp(large_buffer, message, strlen(message) + 1) == 0);
 
-    assert(joined.fut1_completed == false);
-    assert(joined.fut2_completed == false);
+    assert(joined.fut1_completed == FUTURE_FAILURE);
+    assert(joined.fut2_completed == FUTURE_FAILURE);
     assert(joined.result.fut1.errcode == PIPE_FUTURE_ERR_EOF);
     assert(joined.result.fut2.errcode == PIPE_FUTURE_ERR_EOF);
     assert(joined.base.errcode == JOIN_FUTURE_ERR_BOTH_FUTS_FAILED);
@@ -280,8 +280,8 @@ void test_then_and_join()
     assert(((ThenFuture*)f123_bad.fut1)->fut1 == (Future*)&f1_bad);
     assert(memcmp(large_buffer, message, sizeof(buffer)) == 0);  // f1_bad read until EOF, but capitalize was never called.
 
-    assert(joined.fut1_completed == true);
-    assert(joined.fut2_completed == false);
+    assert(joined.fut1_completed == FUTURE_COMPLETED);
+    assert(joined.fut2_completed == FUTURE_FAILURE);
     assert(joined.result.fut1.ok == buffer);
     assert(joined.result.fut2.errcode == THEN_FUTURE_ERR_FUT1_FAILED);
     assert(joined.base.errcode == JOIN_FUTURE_ERR_FUT2_FAILED);

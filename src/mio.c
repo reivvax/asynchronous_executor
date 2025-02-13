@@ -49,7 +49,7 @@ int mio_register(Mio* mio, int fd, uint32_t events, Waker waker) {
     ev.events = events;
     ev.data.ptr = (void*) waker.future;
     int res = epoll_ctl(mio->epoll_fd, EPOLL_CTL_ADD, fd, &ev);
-    
+
     if (res == 0)
         mio->registered_events_count++;
     else if (res == -1 && errno == EEXIST)
@@ -76,7 +76,6 @@ void mio_poll(Mio* mio) {
     if (mio->registered_events_count > 0) {
         int event_count = epoll_wait(mio->epoll_fd, mio->events, MAX_EVENTS, -1);
         ASSERT_SYS_OK(event_count);
-        debug("MIO EVENTS COUNT = %d\n", event_count);
         for (int i = 0; i < event_count; i++) {
             Future* fut = (Future*) mio->events[i].data.ptr;
             Waker waker = (Waker) {.executor = mio->executor, .future = fut};
