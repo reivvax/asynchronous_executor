@@ -4,9 +4,6 @@
 #include "future.h"
 #include "waker.h"
 
-#define FUTURE_PRESENT_IN_QUEUE -570240218
-#define FUTURE_CANCELLED -570240219
-
 #define ASSERT_MALLOC_SUCCEEDED(expr)                                          \
     do {                                                                       \
         if ((expr) == NULL) {                                                  \

@@ -51,7 +51,7 @@ void test_select_1() {
     // Make another future for another pipe, as before, but with a larger buffer.
     // This should progress concurrently with good_future, but eventually fail
     // (only after the write-end of the pipe is closed), because there aren't enough bytes to read.
-    read_fd = create_example_read_pipe_end(message, 3, 1, 2);
+    read_fd = create_example_read_pipe_end(message, 3, 0, 2);
     uint8_t large_buffer[1000];
     PipeReadFuture f1_bad = pipe_read_future_create(read_fd, large_buffer, sizeof(large_buffer));
     Future* bad_future = (Future*)&f1_bad;

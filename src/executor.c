@@ -10,8 +10,6 @@
 #include "mio.h"
 #include "waker.h"
 
-#define FUTURE_PRESENT_IN_QUEUE -570240218
-
 #define ASSERT_MALLOC_SUCCEEDED(expr)                                          \
     do {                                                                       \
         if ((expr) == NULL) {                                                  \
@@ -92,8 +90,7 @@ Executor* executor_create(size_t max_queue_size) {
 
 void waker_wake(Waker* waker) {
     Executor* exec = (Executor*) waker->executor;
-    if (exec && waker->future && waker->future->errcode != FUTURE_PRESENT_IN_QUEUE) {
-        waker->future->errcode = FUTURE_PRESENT_IN_QUEUE;
+    if (exec && waker->future) {
         queue_push(&exec->futures_queue, waker->future);
     }
 }
@@ -105,14 +102,10 @@ void executor_spawn(Executor* executor, Future* fut) {
 
 void executor_run(Executor* executor) {
     Queue* q = &executor->futures_queue;
-    int j = 0;
     while (!empty(q)) {
         size_t q_size = q->size;
         for (size_t i = 0; i < q_size; i++) {
             Future* current_fut = (Future*) queue_pop(q);
-            if (current_fut->errcode == FUTURE_PRESENT_IN_QUEUE)
-                current_fut->errcode = FUTURE_SUCCESS; // Reset the value, so that the future can be put in queue again
-
             Waker waker = (Waker) {.executor = executor, .future = current_fut};
             FutureState state = current_fut->progress(current_fut, executor->mio, waker);
             switch (state) {
@@ -125,9 +118,6 @@ void executor_run(Executor* executor) {
                 case FUTURE_PENDING:
                     break;
             }
-            j++;
-            if(j > 20)
-                return;
         }
         mio_poll(executor->mio);
     }
