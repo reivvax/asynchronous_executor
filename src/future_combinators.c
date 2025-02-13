@@ -4,6 +4,9 @@
 #include "future.h"
 #include "waker.h"
 
+#define FUTURE_PRESENT_IN_QUEUE -570240218
+#define FUTURE_CANCELLED -570240219
+
 #define ASSERT_MALLOC_SUCCEEDED(expr)                                          \
     do {                                                                       \
         if ((expr) == NULL) {                                                  \
@@ -180,10 +183,9 @@ JoinFuture future_join(Future* fut1, Future* fut2) {
 
 FutureState future_select_progress(Future* base, Mio* mio, Waker waker) {
     SelectFuture* fut = (SelectFuture*) base;
-    debug("ENTERING SELECT FUTURE\n");
+
     if ((fut->which_completed == SELECT_COMPLETED_FUT1) || (fut->which_completed == SELECT_COMPLETED_FUT2)) {
         fut->base.errcode = FUTURE_SUCCESS;
-        debug("RETURNING EARLY...\n");
         return FUTURE_COMPLETED;
     }
 
@@ -191,11 +193,14 @@ FutureState future_select_progress(Future* base, Mio* mio, Waker waker) {
     Future* fut2 = fut->fut2;
     
     FutureState state1 = fut1->progress(fut1, mio, waker);
-    debug("FUT1 returned state = %d\n", state1);
     switch (state1) {
         case FUTURE_COMPLETED:
             fut->which_completed = SELECT_COMPLETED_FUT1;
             fut->base.errcode = FUTURE_SUCCESS;
+            // Let fut2 finish in the background.
+            // Not ideal, however I cannot find another solution so that mio structure doesn't get filled up
+            // and that the select is not being executed endlessly
+            fut2->progress(fut2, mio, (Waker) {.executor = waker.executor, .future = fut2});
             return FUTURE_COMPLETED;
         case FUTURE_FAILURE:
             fut->base.errcode = fut1->errcode;
@@ -210,13 +215,13 @@ FutureState future_select_progress(Future* base, Mio* mio, Waker waker) {
             break;
     }
 
-    // don't allow enqueuing Future* base twice
-    FutureState state2 = fut2->progress(fut2, mio, (Waker) {.executor = NULL, .future = fut2});
-    debug("FUT2 returned state = %d\n", state2);
+    FutureState state2 = fut2->progress(fut2, mio, waker);
     switch (state2) {
         case FUTURE_COMPLETED:
             fut->which_completed = SELECT_COMPLETED_FUT2;
             fut->base.errcode = FUTURE_SUCCESS;
+            // Same as above
+            fut1->progress(fut1, mio, (Waker) {.executor = waker.executor, .future = fut1});
             return FUTURE_COMPLETED;
         case FUTURE_FAILURE:
             fut->base.errcode = fut2->errcode;

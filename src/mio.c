@@ -53,7 +53,7 @@ int mio_register(Mio* mio, int fd, uint32_t events, Waker waker) {
     if (res == 0)
         mio->registered_events_count++;
     else if (res == -1 && errno == EEXIST)
-        res = 0;
+        res = epoll_ctl(mio->epoll_fd, EPOLL_CTL_MOD, fd, &ev);
 
     return res;
 }
@@ -79,7 +79,7 @@ void mio_poll(Mio* mio) {
         for (int i = 0; i < event_count; i++) {
             Future* fut = (Future*) mio->events[i].data.ptr;
             Waker waker = (Waker) {.executor = mio->executor, .future = fut};
-            debug("Waker exec = %p, Waker fut = %p\n", waker.executor, waker.future);
+            debug("Waker: exec = %p, fut = %p\n", waker.executor, waker.future);
             waker_wake(&waker);
         }
     }
