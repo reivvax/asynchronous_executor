@@ -20,22 +20,19 @@
         }                                                                      \
     } while (0)
 
-struct Node {
-    void* data;
-    struct Node* next;
-};
-
-typedef struct Node Node;
-
+// Cyclic buffer queue
 typedef struct Queue {
-    Node* begin;
-    Node* end;
+    void** data;
+    size_t head;
+    size_t tail;
     size_t size;
     size_t capacity;
 } Queue;
 
 static void queue_init(Queue* q, size_t capacity) {
-    q->begin = q->end = NULL;
+    q->data = malloc(sizeof(void*) * capacity);
+    q->head = 0;
+    q->tail = 0;
     q->size = 0;
     q->capacity = capacity;
 }
@@ -44,48 +41,27 @@ static bool empty(Queue* q) {
     return q->size == 0;
 }
 
-// Returns the node that contains pushed data
-static Node* queue_push(Queue* q, void* data) {
+static void queue_push(Queue* q, void* elem) {
     if (q->size == q->capacity)
-        return NULL;
+        return;
 
-    Node* res = (Node*) malloc(sizeof(Node));
-    if (!res)
-        return res;
-
-    res->data = data;
-    res->next = NULL;
-
-    if (q->end == NULL) {
-        q->begin = q->end = res;
-    } else {
-        q->end->next = res;
-        q->end = res;
-    }
+    q->data[q->tail] = elem;
+    q->tail = (q->tail + 1) % q->capacity; 
     q->size++;
-    return res;
 }
 
-// Returns node->data, frees the 'begin' node
 static void* queue_pop(Queue* q) {
     if (empty(q))
         return NULL;
 
-    void* res = q->begin->data;
-    Node* old_begin = q->begin;
-    q->begin = old_begin->next;
-    if (q->begin == NULL)
-        q->end = NULL;
-
-    free(old_begin);
-
+    void* res = q->data[q->head];
+    q->head = (q->head + 1) % q->capacity;
     q->size--;
     return res;
 }
 
 static void queue_destroy(Queue* q) {
-    while (!empty(q))
-        queue_pop(q);
+    free(q->data);
 }
 
 /**
